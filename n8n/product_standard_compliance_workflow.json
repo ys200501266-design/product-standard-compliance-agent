@@ -1,0 +1,364 @@
+{
+  "name": "Product Standard Compliance Recommendation Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "product-compliance-recommend",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-product-compliance",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.OPENAI_API_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"model\":\"gpt-4.1-mini\",\"temperature\":0.1,\"response_format\":{\"type\":\"json_object\"},\"messages\":[{\"role\":\"system\",\"content\":\"你是产品标准合规分析助手。根据用户输入识别产品品类、风险属性、标准检索关键词和商品搜索关键词。禁止编造标准编号、认证和商品链接。只输出 JSON。\"},{\"role\":\"user\",\"content\":\"用户输入：\" + JSON.stringify($json.body) + \"\\n请输出字段：normalized_product_name, category, sub_category, use_case, region, budget, risk_level, possible_materials_or_components, compliance_focus, standard_search_keywords, product_search_keywords, uncertainties。\"}]}"
+      },
+      "id": "llm-category-identification",
+      "name": "LLM 1 - Product Category Identification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [260, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://serpapi.com/search.json",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "engine",
+              "value": "bing"
+            },
+            {
+              "name": "api_key",
+              "value": "={{$env.SERPAPI_API_KEY}}"
+            },
+            {
+              "name": "num",
+              "value": "10"
+            },
+            {
+              "name": "q",
+              "value": "={{'site:openstd.samr.gov.cn OR site:std.samr.gov.cn OR site:samr.gov.cn OR site:nhc.gov.cn OR site:gov.cn ' + JSON.parse($node['LLM 1 - Product Category Identification'].json.choices[0].message.content).standard_search_keywords.join(' ')}}"
+            }
+          ]
+        }
+      },
+      "id": "search-standard",
+      "name": "Search 1 - Standard Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [520, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.OPENAI_API_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"model\":\"gpt-4.1-mini\",\"temperature\":0.1,\"response_format\":{\"type\":\"json_object\"},\"messages\":[{\"role\":\"system\",\"content\":\"你是中国消费品标准合规研究员。只基于搜索结果整理标准、认证和来源。禁止编造标准编号、标准名称和链接。没有证据必须写暂无公开证据证明。只输出 JSON。\"},{\"role\":\"user\",\"content\":\"产品品类识别结果：\" + $node['LLM 1 - Product Category Identification'].json.choices[0].message.content + \"\\n标准搜索结果：\" + JSON.stringify($json.organic_results || $json)}]}"
+      },
+      "id": "llm-standard-extraction",
+      "name": "LLM 2 - Standard Extraction",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [780, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.OPENAI_API_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"model\":\"gpt-4.1-mini\",\"temperature\":0.1,\"response_format\":{\"type\":\"json_object\"},\"messages\":[{\"role\":\"system\",\"content\":\"你是商品调研和搜索策略专家。根据用户需求和标准整理结果生成商品、品牌官网、电商详情页、检测报告搜索 query。不要编造商品、品牌或链接。只输出 JSON。\"},{\"role\":\"user\",\"content\":\"用户需求：\" + JSON.stringify($node['Webhook'].json.body) + \"\\n标准整理结果：\" + $node['LLM 2 - Standard Extraction'].json.choices[0].message.content + \"\\n输出字段：primary_product_query, evidence_queries, brand_official_queries, ecommerce_queries, negative_filters, must_include_terms, preferred_sources。\"}]}"
+      },
+      "id": "llm-product-search-strategy",
+      "name": "LLM 3 - Product Search Strategy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1040, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://serpapi.com/search.json",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "engine",
+              "value": "bing"
+            },
+            {
+              "name": "api_key",
+              "value": "={{$env.SERPAPI_API_KEY}}"
+            },
+            {
+              "name": "num",
+              "value": "10"
+            },
+            {
+              "name": "q",
+              "value": "={{JSON.parse($node['LLM 3 - Product Search Strategy'].json.choices[0].message.content).primary_product_query}}"
+            }
+          ]
+        }
+      },
+      "id": "search-product",
+      "name": "Search 2 - Product Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1300, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.OPENAI_API_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"model\":\"gpt-4.1-mini\",\"temperature\":0.1,\"response_format\":{\"type\":\"json_object\"},\"messages\":[{\"role\":\"system\",\"content\":\"你是产品合规证据分析师。判断商品是否公开标注执行标准、认证、检测报告或材质合规信息。不能编造产品、价格、链接、检测报告或标准。没有证据必须写暂无公开证据证明。只输出 JSON。\"},{\"role\":\"user\",\"content\":\"用户需求：\" + JSON.stringify($node['Webhook'].json.body) + \"\\n标准整理结果：\" + $node['LLM 2 - Standard Extraction'].json.choices[0].message.content + \"\\n产品搜索结果：\" + JSON.stringify($json.organic_results || $json)}]}"
+      },
+      "id": "llm-compliance-analysis",
+      "name": "LLM 4 - Compliance Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.OPENAI_API_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"model\":\"gpt-4.1-mini\",\"temperature\":0.1,\"response_format\":{\"type\":\"json_object\"},\"messages\":[{\"role\":\"system\",\"content\":\"你是产品经理型选品推荐助手。按标准匹配度40%、信息可信度20%、价格合理性15%、品牌可信度15%、用户需求匹配度10%评分排序。禁止编造。只输出 JSON。\"},{\"role\":\"user\",\"content\":\"用户需求：\" + JSON.stringify($node['Webhook'].json.body) + \"\\n标准整理结果：\" + $node['LLM 2 - Standard Extraction'].json.choices[0].message.content + \"\\n产品合规分析：\" + $node['LLM 4 - Compliance Analysis'].json.choices[0].message.content}]}"
+      },
+      "id": "llm-product-ranking",
+      "name": "LLM 5 - Product Ranking",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1820, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.OPENAI_API_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"model\":\"gpt-4.1-mini\",\"temperature\":0.2,\"messages\":[{\"role\":\"system\",\"content\":\"你是面向普通用户和采购初筛场景的 AI 产品合规报告撰写助手。生成 Markdown 报告，包含产品类别判断、标准表格、选品判断标准、推荐产品列表、最终推荐结论和免责声明。禁止编造标准和链接，缺少证据必须保留暂无公开证据证明。\"},{\"role\":\"user\",\"content\":\"用户需求：\" + JSON.stringify($node['Webhook'].json.body) + \"\\n标准整理结果：\" + $node['LLM 2 - Standard Extraction'].json.choices[0].message.content + \"\\n推荐排序结果：\" + $node['LLM 5 - Product Ranking'].json.choices[0].message.content}]}"
+      },
+      "id": "llm-final-report",
+      "name": "LLM 6 - Final Report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2080, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{$node['LLM 6 - Final Report'].json.choices[0].message.content}}",
+        "options": {}
+      },
+      "id": "respond-to-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [2340, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "LLM 1 - Product Category Identification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM 1 - Product Category Identification": {
+      "main": [
+        [
+          {
+            "node": "Search 1 - Standard Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search 1 - Standard Search": {
+      "main": [
+        [
+          {
+            "node": "LLM 2 - Standard Extraction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM 2 - Standard Extraction": {
+      "main": [
+        [
+          {
+            "node": "LLM 3 - Product Search Strategy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM 3 - Product Search Strategy": {
+      "main": [
+        [
+          {
+            "node": "Search 2 - Product Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search 2 - Product Search": {
+      "main": [
+        [
+          {
+            "node": "LLM 4 - Compliance Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM 4 - Compliance Analysis": {
+      "main": [
+        [
+          {
+            "node": "LLM 5 - Product Ranking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM 5 - Product Ranking": {
+      "main": [
+        [
+          {
+            "node": "LLM 6 - Final Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM 6 - Final Report": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2026-06-01T00:00:00.000Z",
+  "versionId": "product-standard-compliance-agent-v1"
+}
