@@ -1,27 +1,40 @@
-# 用户流程
+# User Flow
+
+## 用户流程图
 
 ```mermaid
 sequenceDiagram
-    participant User as 用户
-    participant Webhook as n8n Webhook
-    participant LLM as LLM 节点
-    participant Search as 搜索 API
-    participant Report as 报告生成
+    participant U as 用户
+    participant W as Webhook
+    participant V as 输入校验
+    participant L as LLM 节点
+    participant S as 搜索 API
+    participant R as 报告
 
-    User->>Webhook: 提交产品需求
-    Webhook->>LLM: 识别品类和检索关键词
-    LLM->>Search: 查询标准和认证信息
-    Search->>LLM: 返回标准搜索结果
-    LLM->>Search: 查询商品和证据页面
-    Search->>LLM: 返回商品搜索结果
-    LLM->>Report: 合规分析和推荐排序
-    Report->>User: 返回 Markdown 报告
+    U->>W: 提交产品需求
+    W->>V: 校验 product_name
+    V->>L: 识别品类
+    L->>S: 搜索标准信息
+    S->>L: 返回标准线索
+    L->>S: 搜索商品证据
+    S->>L: 返回商品线索
+    L->>R: 评分排序并生成报告
+    R->>U: 返回 Markdown 报告
 ```
 
-## 用户操作
+## 用户操作步骤
 
-1. 输入产品名称、使用场景、预算、购买地区和特殊要求。
-2. 等待工作流检索标准和商品证据。
-3. 阅读最终报告中的标准表格、推荐产品和风险提醒。
-4. 购买前再次核对商品详情页、包装标识或品牌客服信息。
+| 步骤 | 用户动作 | 系统反馈 |
+|---:|---|---|
+| 1 | 输入产品需求 | 接收结构化字段 |
+| 2 | 等待执行 | 工作流搜索标准和商品证据 |
+| 3 | 查看报告 | 获得标准、推荐和风险提醒 |
+| 4 | 二次确认 | 根据来源链接检查商品详情 |
 
+## 异常体验
+
+| 场景 | 用户看到的结果 |
+|---|---|
+| 缺少产品名称 | 返回错误 JSON |
+| 标准线索不足 | 返回兜底报告，不强行推荐 |
+| 商品证据不足 | 返回风险说明，不输出强推荐 |

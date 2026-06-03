@@ -1,5 +1,7 @@
 {
+    "id":  "productStandardComplianceAgent001",
     "name":  "Product Standard Compliance Recommendation Agent",
+    "active":  false,
     "nodes":  [
                   {
                       "parameters":  {
@@ -21,29 +23,12 @@
                   },
                   {
                       "parameters":  {
-                                         "method":  "POST",
-                                         "url":  "https://api.openai.com/v1/chat/completions",
-                                         "sendHeaders":  true,
-                                         "headerParameters":  {
-                                                                  "parameters":  [
-                                                                                     {
-                                                                                         "name":  "Authorization",
-                                                                                         "value":  "=Bearer {{$env.OPENAI_API_KEY}}"
-                                                                                     },
-                                                                                     {
-                                                                                         "name":  "Content-Type",
-                                                                                         "value":  "application/json"
-                                                                                     }
-                                                                                 ]
-                                                              },
-                                         "sendBody":  true,
-                                         "specifyBody":  "json",
-                                         "jsonBody":  "={\"model\":\"gpt-4.1-mini\",\"temperature\":0.1,\"response_format\":{\"type\":\"json_object\"},\"messages\":[{\"role\":\"system\",\"content\":\"你是产品标准合规分析助手。根据用户输入识别产品品类、风险属性、标准检索关键词和商品搜索关键词。禁止编造标准编号、认证和商品链接。只输出 JSON。\"},{\"role\":\"user\",\"content\":\"用户输入：\" + JSON.stringify($json.body) + \"\\n请输出字段：normalized_product_name, category, sub_category, use_case, region, budget, risk_level, possible_materials_or_components, compliance_focus, standard_search_keywords, product_search_keywords, uncertainties。\"}]}"
+                                         "jsCode":  "const body = $json.body || $json;\nreturn [{\n  json: {\n    product_name: body.product_name || \"\",\n    use_case: body.use_case || \"\",\n    budget: body.budget || \"\",\n    region: body.region || \"中国大陆\",\n    extra_requirements: body.extra_requirements || \"\",\n    mock_demo_mode: body.mock_demo_mode === true,\n    is_missing_product_name: !body.product_name || String(body.product_name).trim() === \"\"\n  }\n}];"
                                      },
-                      "id":  "llm-category-identification",
-                      "name":  "LLM 1 - Product Category Identification",
-                      "type":  "n8n-nodes-base.httpRequest",
-                      "typeVersion":  4.2,
+                      "id":  "input-validation",
+                      "name":  "Input Validation",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
                       "position":  [
                                        260,
                                        300
@@ -51,36 +36,39 @@
                   },
                   {
                       "parameters":  {
-                                         "url":  "https://serpapi.com/search.json",
-                                         "sendQuery":  true,
-                                         "queryParameters":  {
-                                                                 "parameters":  [
-                                                                                    {
-                                                                                        "name":  "engine",
-                                                                                        "value":  "bing"
-                                                                                    },
-                                                                                    {
-                                                                                        "name":  "api_key",
-                                                                                        "value":  "={{$env.SERPAPI_API_KEY}}"
-                                                                                    },
-                                                                                    {
-                                                                                        "name":  "num",
-                                                                                        "value":  "10"
-                                                                                    },
-                                                                                    {
-                                                                                        "name":  "q",
-                                                                                        "value":  "={{\u0027site:openstd.samr.gov.cn OR site:std.samr.gov.cn OR site:samr.gov.cn OR site:nhc.gov.cn OR site:gov.cn \u0027 + JSON.parse($node[\u0027LLM 1 - Product Category Identification\u0027].json.choices[0].message.content).standard_search_keywords.join(\u0027 \u0027)}}"
-                                                                                    }
-                                                                                ]
-                                                             }
+                                         "conditions":  {
+                                                            "boolean":  [
+                                                                            {
+                                                                                "value1":  "={{.is_missing_product_name}}",
+                                                                                "value2":  true
+                                                                            }
+                                                                        ]
+                                                        }
                                      },
-                      "id":  "search-standard",
-                      "name":  "Search 1 - Standard Search",
-                      "type":  "n8n-nodes-base.httpRequest",
-                      "typeVersion":  4.2,
+                      "id":  "if-missing-product-name",
+                      "name":  "IF - Missing product_name",
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  1,
                       "position":  [
                                        520,
                                        300
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "respondWith":  "json",
+                                         "responseBody":  "={{ { error: true, message: \u0027缺少 product_name，请输入要查询的产品名称。\u0027 } }}",
+                                         "options":  {
+                                                         "responseCode":  400
+                                                     }
+                                     },
+                      "id":  "error-missing-product-name",
+                      "name":  "Error Response - Missing product_name",
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1.4,
+                      "position":  [
+                                       780,
+                                       160
                                    ]
                   },
                   {
@@ -92,7 +80,7 @@
                                                                   "parameters":  [
                                                                                      {
                                                                                          "name":  "Authorization",
-                                                                                         "value":  "=Bearer {{$env.OPENAI_API_KEY}}"
+                                                                                         "value":  "=Bearer {{.OPENAI_API_KEY}}"
                                                                                      },
                                                                                      {
                                                                                          "name":  "Content-Type",
@@ -102,10 +90,10 @@
                                                               },
                                          "sendBody":  true,
                                          "specifyBody":  "json",
-                                         "jsonBody":  "={\"model\":\"gpt-4.1-mini\",\"temperature\":0.1,\"response_format\":{\"type\":\"json_object\"},\"messages\":[{\"role\":\"system\",\"content\":\"你是中国消费品标准合规研究员。只基于搜索结果整理标准、认证和来源。禁止编造标准编号、标准名称和链接。没有证据必须写暂无公开证据证明。只输出 JSON。\"},{\"role\":\"user\",\"content\":\"产品品类识别结果：\" + $node[\u0027LLM 1 - Product Category Identification\u0027].json.choices[0].message.content + \"\\n标准搜索结果：\" + JSON.stringify($json.organic_results || $json)}]}"
+                                         "jsonBody":  "={\"model\":\"gpt-4.1-mini\",\"temperature\":0.1,\"response_format\":{\"type\":\"json_object\"},\"messages\":[{\"role\":\"system\",\"content\":\"你是产品标准合规分析助手。识别品类、风险和检索关键词。禁止编造标准编号、认证、商品链接。必须区分 facts、inferences、uncertainty。只输出 JSON。\"},{\"role\":\"user\",\"content\":\"用户输入：\" + JSON.stringify($json)}]}"
                                      },
-                      "id":  "llm-standard-extraction",
-                      "name":  "LLM 2 - Standard Extraction",
+                      "id":  "llm-category-identification",
+                      "name":  "LLM 1 - Product Category Identification",
                       "type":  "n8n-nodes-base.httpRequest",
                       "typeVersion":  4.2,
                       "position":  [
@@ -115,6 +103,90 @@
                   },
                   {
                       "parameters":  {
+                                         "url":  "https://serpapi.com/search.json",
+                                         "sendQuery":  true,
+                                         "queryParameters":  {
+                                                                 "parameters":  [
+                                                                                    {
+                                                                                        "name":  "engine",
+                                                                                        "value":  "bing"
+                                                                                    },
+                                                                                    {
+                                                                                        "name":  "api_key",
+                                                                                        "value":  "={{.SERPAPI_API_KEY}}"
+                                                                                    },
+                                                                                    {
+                                                                                        "name":  "num",
+                                                                                        "value":  "10"
+                                                                                    },
+                                                                                    {
+                                                                                        "name":  "q",
+                                                                                        "value":  "={{\u0027site:openstd.samr.gov.cn OR site:std.samr.gov.cn OR site:samr.gov.cn OR site:nhc.gov.cn OR site:gov.cn \u0027 + (JSON.parse([\u0027LLM 1 - Product Category Identification\u0027].json.choices[0].message.content).standard_search_keywords || [.product_name]).join(\u0027 \u0027)}}"
+                                                                                    }
+                                                                                ]
+                                                             }
+                                     },
+                      "id":  "search-standard",
+                      "name":  "Search 1 - Standard Search",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       1040,
+                                       300
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const results = $json.organic_results || $json.results || [];\nreturn [{ json: { ...$json, has_standard_results: Array.isArray(results) \u0026\u0026 results.length \u003e 0 } }];"
+                                     },
+                      "id":  "check-standard-results",
+                      "name":  "Check Standard Search Results",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1300,
+                                       300
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "boolean":  [
+                                                                            {
+                                                                                "value1":  "={{.has_standard_results}}",
+                                                                                "value2":  true
+                                                                            }
+                                                                        ]
+                                                        }
+                                     },
+                      "id":  "if-standard-results",
+                      "name":  "IF - Standard Search Has Results",
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  1,
+                      "position":  [
+                                       1560,
+                                       300
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "respondWith":  "text",
+                                         "responseBody":  "# 产品标准合规推荐报告\n\n未找到足够的公开标准信息，本次结果仅能作为初步搜索线索，不构成推荐结论。\n\n建议更换搜索 API、增加产品材质或使用场景后重新运行。",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "fallback-no-standard",
+                      "name":  "Fallback Response - No Standard Results",
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1.4,
+                      "position":  [
+                                       1820,
+                                       160
+                                   ]
+                  },
+                  {
+                      "parameters":  {
                                          "method":  "POST",
                                          "url":  "https://api.openai.com/v1/chat/completions",
                                          "sendHeaders":  true,
@@ -122,7 +194,7 @@
                                                                   "parameters":  [
                                                                                      {
                                                                                          "name":  "Authorization",
-                                                                                         "value":  "=Bearer {{$env.OPENAI_API_KEY}}"
+                                                                                         "value":  "=Bearer {{.OPENAI_API_KEY}}"
                                                                                      },
                                                                                      {
                                                                                          "name":  "Content-Type",
@@ -132,15 +204,45 @@
                                                               },
                                          "sendBody":  true,
                                          "specifyBody":  "json",
-                                         "jsonBody":  "={\"model\":\"gpt-4.1-mini\",\"temperature\":0.1,\"response_format\":{\"type\":\"json_object\"},\"messages\":[{\"role\":\"system\",\"content\":\"你是商品调研和搜索策略专家。根据用户需求和标准整理结果生成商品、品牌官网、电商详情页、检测报告搜索 query。不要编造商品、品牌或链接。只输出 JSON。\"},{\"role\":\"user\",\"content\":\"用户需求：\" + JSON.stringify($node[\u0027Webhook\u0027].json.body) + \"\\n标准整理结果：\" + $node[\u0027LLM 2 - Standard Extraction\u0027].json.choices[0].message.content + \"\\n输出字段：primary_product_query, evidence_queries, brand_official_queries, ecommerce_queries, negative_filters, must_include_terms, preferred_sources。\"}]}"
+                                         "jsonBody":  "={\"model\":\"gpt-4.1-mini\",\"temperature\":0.1,\"response_format\":{\"type\":\"json_object\"},\"messages\":[{\"role\":\"system\",\"content\":\"你是中国消费品标准合规研究员。只基于搜索结果整理标准。禁止编造标准编号、名称和链接。输出 evidence_level、evidence_summary、uncertainty。只输出 JSON。\"},{\"role\":\"user\",\"content\":\"品类识别：\" + $node[\u0027LLM 1 - Product Category Identification\u0027].json.choices[0].message.content + \"\\n标准搜索结果：\" + JSON.stringify($json.organic_results || $json)}]}"
+                                     },
+                      "id":  "llm-standard-extraction",
+                      "name":  "LLM 2 - Standard Extraction",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       1820,
+                                       360
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "https://api.openai.com/v1/chat/completions",
+                                         "sendHeaders":  true,
+                                         "headerParameters":  {
+                                                                  "parameters":  [
+                                                                                     {
+                                                                                         "name":  "Authorization",
+                                                                                         "value":  "=Bearer {{.OPENAI_API_KEY}}"
+                                                                                     },
+                                                                                     {
+                                                                                         "name":  "Content-Type",
+                                                                                         "value":  "application/json"
+                                                                                     }
+                                                                                 ]
+                                                              },
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={\"model\":\"gpt-4.1-mini\",\"temperature\":0.1,\"response_format\":{\"type\":\"json_object\"},\"messages\":[{\"role\":\"system\",\"content\":\"你是商品调研和搜索策略专家。生成商品、品牌官网、电商详情页、检测报告搜索 query。禁止编造品牌、商品和链接。只输出 JSON。\"},{\"role\":\"user\",\"content\":\"用户需求：\" + JSON.stringify($node[\u0027Input Validation\u0027].json) + \"\\n标准整理：\" + $node[\u0027LLM 2 - Standard Extraction\u0027].json.choices[0].message.content}]}"
                                      },
                       "id":  "llm-product-search-strategy",
                       "name":  "LLM 3 - Product Search Strategy",
                       "type":  "n8n-nodes-base.httpRequest",
                       "typeVersion":  4.2,
                       "position":  [
-                                       1040,
-                                       300
+                                       2080,
+                                       360
                                    ]
                   },
                   {
@@ -155,7 +257,7 @@
                                                                                     },
                                                                                     {
                                                                                         "name":  "api_key",
-                                                                                        "value":  "={{$env.SERPAPI_API_KEY}}"
+                                                                                        "value":  "={{.SERPAPI_API_KEY}}"
                                                                                     },
                                                                                     {
                                                                                         "name":  "num",
@@ -163,7 +265,7 @@
                                                                                     },
                                                                                     {
                                                                                         "name":  "q",
-                                                                                        "value":  "={{JSON.parse($node[\u0027LLM 3 - Product Search Strategy\u0027].json.choices[0].message.content).primary_product_query}}"
+                                                                                        "value":  "={{JSON.parse([\u0027LLM 3 - Product Search Strategy\u0027].json.choices[0].message.content).primary_product_query}}"
                                                                                     }
                                                                                 ]
                                                              }
@@ -173,8 +275,58 @@
                       "type":  "n8n-nodes-base.httpRequest",
                       "typeVersion":  4.2,
                       "position":  [
-                                       1300,
-                                       300
+                                       2340,
+                                       360
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const results = $json.organic_results || $json.results || [];\nreturn [{ json: { ...$json, has_product_results: Array.isArray(results) \u0026\u0026 results.length \u003e 0 } }];"
+                                     },
+                      "id":  "check-product-results",
+                      "name":  "Check Product Search Results",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       2600,
+                                       360
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "boolean":  [
+                                                                            {
+                                                                                "value1":  "={{.has_product_results}}",
+                                                                                "value2":  true
+                                                                            }
+                                                                        ]
+                                                        }
+                                     },
+                      "id":  "if-product-results",
+                      "name":  "IF - Product Search Has Results",
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  1,
+                      "position":  [
+                                       2860,
+                                       360
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "respondWith":  "text",
+                                         "responseBody":  "# 产品标准合规推荐报告\n\n未找到足够的商品公开证据，因此不输出强推荐商品。\n\n建议补充品牌、平台或商品链接后重新运行。",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "fallback-no-product",
+                      "name":  "Fallback Response - No Product Evidence",
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1.4,
+                      "position":  [
+                                       3120,
+                                       200
                                    ]
                   },
                   {
@@ -186,7 +338,7 @@
                                                                   "parameters":  [
                                                                                      {
                                                                                          "name":  "Authorization",
-                                                                                         "value":  "=Bearer {{$env.OPENAI_API_KEY}}"
+                                                                                         "value":  "=Bearer {{.OPENAI_API_KEY}}"
                                                                                      },
                                                                                      {
                                                                                          "name":  "Content-Type",
@@ -196,15 +348,15 @@
                                                               },
                                          "sendBody":  true,
                                          "specifyBody":  "json",
-                                         "jsonBody":  "={\"model\":\"gpt-4.1-mini\",\"temperature\":0.1,\"response_format\":{\"type\":\"json_object\"},\"messages\":[{\"role\":\"system\",\"content\":\"你是产品合规证据分析师。判断商品是否公开标注执行标准、认证、检测报告或材质合规信息。不能编造产品、价格、链接、检测报告或标准。没有证据必须写暂无公开证据证明。只输出 JSON。\"},{\"role\":\"user\",\"content\":\"用户需求：\" + JSON.stringify($node[\u0027Webhook\u0027].json.body) + \"\\n标准整理结果：\" + $node[\u0027LLM 2 - Standard Extraction\u0027].json.choices[0].message.content + \"\\n产品搜索结果：\" + JSON.stringify($json.organic_results || $json)}]}"
+                                         "jsonBody":  "={\"model\":\"gpt-4.1-mini\",\"temperature\":0.1,\"response_format\":{\"type\":\"json_object\"},\"messages\":[{\"role\":\"system\",\"content\":\"你是产品合规证据分析师。每个商品必须输出 evidence_level、evidence_summary、uncertainty。禁止编造链接、价格、检测报告和标准。只输出 JSON。\"},{\"role\":\"user\",\"content\":\"用户需求：\" + JSON.stringify($node[\u0027Input Validation\u0027].json) + \"\\n标准整理：\" + $node[\u0027LLM 2 - Standard Extraction\u0027].json.choices[0].message.content + \"\\n产品搜索结果：\" + JSON.stringify($json.organic_results || $json)}]}"
                                      },
                       "id":  "llm-compliance-analysis",
                       "name":  "LLM 4 - Compliance Analysis",
                       "type":  "n8n-nodes-base.httpRequest",
                       "typeVersion":  4.2,
                       "position":  [
-                                       1560,
-                                       300
+                                       3120,
+                                       420
                                    ]
                   },
                   {
@@ -216,7 +368,7 @@
                                                                   "parameters":  [
                                                                                      {
                                                                                          "name":  "Authorization",
-                                                                                         "value":  "=Bearer {{$env.OPENAI_API_KEY}}"
+                                                                                         "value":  "=Bearer {{.OPENAI_API_KEY}}"
                                                                                      },
                                                                                      {
                                                                                          "name":  "Content-Type",
@@ -226,15 +378,15 @@
                                                               },
                                          "sendBody":  true,
                                          "specifyBody":  "json",
-                                         "jsonBody":  "={\"model\":\"gpt-4.1-mini\",\"temperature\":0.1,\"response_format\":{\"type\":\"json_object\"},\"messages\":[{\"role\":\"system\",\"content\":\"你是产品经理型选品推荐助手。按标准匹配度40%、信息可信度20%、价格合理性15%、品牌可信度15%、用户需求匹配度10%评分排序。禁止编造。只输出 JSON。\"},{\"role\":\"user\",\"content\":\"用户需求：\" + JSON.stringify($node[\u0027Webhook\u0027].json.body) + \"\\n标准整理结果：\" + $node[\u0027LLM 2 - Standard Extraction\u0027].json.choices[0].message.content + \"\\n产品合规分析：\" + $node[\u0027LLM 4 - Compliance Analysis\u0027].json.choices[0].message.content}]}"
+                                         "jsonBody":  "={\"model\":\"gpt-4.1-mini\",\"temperature\":0.1,\"response_format\":{\"type\":\"json_object\"},\"messages\":[{\"role\":\"system\",\"content\":\"你是产品经理型推荐排序助手。100分制：标准匹配40、证据可信25、需求匹配15、价格10、品牌渠道10。禁止给无证据商品强推荐。只输出 JSON。\"},{\"role\":\"user\",\"content\":\"合规分析：\" + $node[\u0027LLM 4 - Compliance Analysis\u0027].json.choices[0].message.content}]}"
                                      },
                       "id":  "llm-product-ranking",
                       "name":  "LLM 5 - Product Ranking",
                       "type":  "n8n-nodes-base.httpRequest",
                       "typeVersion":  4.2,
                       "position":  [
-                                       1820,
-                                       300
+                                       3380,
+                                       420
                                    ]
                   },
                   {
@@ -246,7 +398,7 @@
                                                                   "parameters":  [
                                                                                      {
                                                                                          "name":  "Authorization",
-                                                                                         "value":  "=Bearer {{$env.OPENAI_API_KEY}}"
+                                                                                         "value":  "=Bearer {{.OPENAI_API_KEY}}"
                                                                                      },
                                                                                      {
                                                                                          "name":  "Content-Type",
@@ -256,149 +408,210 @@
                                                               },
                                          "sendBody":  true,
                                          "specifyBody":  "json",
-                                         "jsonBody":  "={\"model\":\"gpt-4.1-mini\",\"temperature\":0.2,\"messages\":[{\"role\":\"system\",\"content\":\"你是面向普通用户和采购初筛场景的 AI 产品合规报告撰写助手。生成 Markdown 报告，包含产品类别判断、标准表格、选品判断标准、推荐产品列表、最终推荐结论和免责声明。禁止编造标准和链接，缺少证据必须保留暂无公开证据证明。\"},{\"role\":\"user\",\"content\":\"用户需求：\" + JSON.stringify($node[\u0027Webhook\u0027].json.body) + \"\\n标准整理结果：\" + $node[\u0027LLM 2 - Standard Extraction\u0027].json.choices[0].message.content + \"\\n推荐排序结果：\" + $node[\u0027LLM 5 - Product Ranking\u0027].json.choices[0].message.content}]}"
+                                         "jsonBody":  "={\"model\":\"gpt-4.1-mini\",\"temperature\":0.2,\"messages\":[{\"role\":\"system\",\"content\":\"你是合规推荐报告撰写助手。生成 Markdown 报告，必须包含证据等级、证据摘要、不确定性和免责声明。禁止编造标准和链接。\"},{\"role\":\"user\",\"content\":\"用户需求：\" + JSON.stringify($node[\u0027Input Validation\u0027].json) + \"\\n标准整理：\" + $node[\u0027LLM 2 - Standard Extraction\u0027].json.choices[0].message.content + \"\\n推荐排序：\" + $node[\u0027LLM 5 - Product Ranking\u0027].json.choices[0].message.content}]}"
                                      },
                       "id":  "llm-final-report",
                       "name":  "LLM 6 - Final Report",
                       "type":  "n8n-nodes-base.httpRequest",
                       "typeVersion":  4.2,
                       "position":  [
-                                       2080,
-                                       300
+                                       3640,
+                                       420
                                    ]
                   },
                   {
                       "parameters":  {
                                          "respondWith":  "text",
-                                         "responseBody":  "={{$node[\u0027LLM 6 - Final Report\u0027].json.choices[0].message.content}}",
+                                         "responseBody":  "={{[\u0027LLM 6 - Final Report\u0027].json.choices[0].message.content}}",
                                          "options":  {
 
                                                      }
                                      },
-                      "id":  "respond-to-webhook",
+                      "id":  "respond-final",
                       "name":  "Respond to Webhook",
                       "type":  "n8n-nodes-base.respondToWebhook",
                       "typeVersion":  1.4,
                       "position":  [
-                                       2340,
-                                       300
+                                       3900,
+                                       420
                                    ]
                   }
               ],
     "connections":  {
                         "Webhook":  {
                                         "main":  [
-                                                     [
-                                                         {
-                                                             "node":  "LLM 1 - Product Category Identification",
-                                                             "type":  "main",
-                                                             "index":  0
-                                                         }
-                                                     ]
+                                                     {
+                                                         "node":  "Input Validation",
+                                                         "type":  "main",
+                                                         "index":  0
+                                                     }
                                                  ]
                                     },
-                        "LLM 1 - Product Category Identification":  {
-                                                                        "main":  [
-                                                                                     [
-                                                                                         {
-                                                                                             "node":  "Search 1 - Standard Search",
-                                                                                             "type":  "main",
-                                                                                             "index":  0
-                                                                                         }
-                                                                                     ]
-                                                                                 ]
-                                                                    },
-                        "Search 1 - Standard Search":  {
-                                                           "main":  [
-                                                                        [
-                                                                            {
-                                                                                "node":  "LLM 2 - Standard Extraction",
-                                                                                "type":  "main",
-                                                                                "index":  0
-                                                                            }
-                                                                        ]
-                                                                    ]
-                                                       },
-                        "LLM 2 - Standard Extraction":  {
-                                                            "main":  [
-                                                                         [
-                                                                             {
-                                                                                 "node":  "LLM 3 - Product Search Strategy",
-                                                                                 "type":  "main",
-                                                                                 "index":  0
-                                                                             }
-                                                                         ]
-                                                                     ]
-                                                        },
-                        "LLM 3 - Product Search Strategy":  {
-                                                                "main":  [
-                                                                             [
-                                                                                 {
-                                                                                     "node":  "Search 2 - Product Search",
-                                                                                     "type":  "main",
-                                                                                     "index":  0
-                                                                                 }
-                                                                             ]
-                                                                         ]
-                                                            },
-                        "Search 2 - Product Search":  {
+                        "Input Validation":  {
+                                                 "main":  [
+                                                              {
+                                                                  "node":  "IF - Missing product_name",
+                                                                  "type":  "main",
+                                                                  "index":  0
+                                                              }
+                                                          ]
+                                             },
+                        "IF - Missing product_name":  {
                                                           "main":  [
                                                                        [
                                                                            {
-                                                                               "node":  "LLM 4 - Compliance Analysis",
+                                                                               "node":  "Error Response - Missing product_name",
+                                                                               "type":  "main",
+                                                                               "index":  0
+                                                                           }
+                                                                       ],
+                                                                       [
+                                                                           {
+                                                                               "node":  "LLM 1 - Product Category Identification",
                                                                                "type":  "main",
                                                                                "index":  0
                                                                            }
                                                                        ]
                                                                    ]
                                                       },
-                        "LLM 4 - Compliance Analysis":  {
+                        "LLM 1 - Product Category Identification":  {
+                                                                        "main":  [
+                                                                                     {
+                                                                                         "node":  "Search 1 - Standard Search",
+                                                                                         "type":  "main",
+                                                                                         "index":  0
+                                                                                     }
+                                                                                 ]
+                                                                    },
+                        "Search 1 - Standard Search":  {
+                                                           "main":  [
+                                                                        {
+                                                                            "node":  "Check Standard Search Results",
+                                                                            "type":  "main",
+                                                                            "index":  0
+                                                                        }
+                                                                    ]
+                                                       },
+                        "Check Standard Search Results":  {
+                                                              "main":  [
+                                                                           {
+                                                                               "node":  "IF - Standard Search Has Results",
+                                                                               "type":  "main",
+                                                                               "index":  0
+                                                                           }
+                                                                       ]
+                                                          },
+                        "IF - Standard Search Has Results":  {
+                                                                 "main":  [
+                                                                              [
+                                                                                  {
+                                                                                      "node":  "LLM 2 - Standard Extraction",
+                                                                                      "type":  "main",
+                                                                                      "index":  0
+                                                                                  }
+                                                                              ],
+                                                                              [
+                                                                                  {
+                                                                                      "node":  "Fallback Response - No Standard Results",
+                                                                                      "type":  "main",
+                                                                                      "index":  0
+                                                                                  }
+                                                                              ]
+                                                                          ]
+                                                             },
+                        "LLM 2 - Standard Extraction":  {
                                                             "main":  [
-                                                                         [
-                                                                             {
-                                                                                 "node":  "LLM 5 - Product Ranking",
-                                                                                 "type":  "main",
-                                                                                 "index":  0
-                                                                             }
-                                                                         ]
-                                                                     ]
-                                                        },
-                        "LLM 5 - Product Ranking":  {
-                                                        "main":  [
-                                                                     [
                                                                          {
-                                                                             "node":  "LLM 6 - Final Report",
+                                                                             "node":  "LLM 3 - Product Search Strategy",
                                                                              "type":  "main",
                                                                              "index":  0
                                                                          }
                                                                      ]
+                                                        },
+                        "LLM 3 - Product Search Strategy":  {
+                                                                "main":  [
+                                                                             {
+                                                                                 "node":  "Search 2 - Product Search",
+                                                                                 "type":  "main",
+                                                                                 "index":  0
+                                                                             }
+                                                                         ]
+                                                            },
+                        "Search 2 - Product Search":  {
+                                                          "main":  [
+                                                                       {
+                                                                           "node":  "Check Product Search Results",
+                                                                           "type":  "main",
+                                                                           "index":  0
+                                                                       }
+                                                                   ]
+                                                      },
+                        "Check Product Search Results":  {
+                                                             "main":  [
+                                                                          {
+                                                                              "node":  "IF - Product Search Has Results",
+                                                                              "type":  "main",
+                                                                              "index":  0
+                                                                          }
+                                                                      ]
+                                                         },
+                        "IF - Product Search Has Results":  {
+                                                                "main":  [
+                                                                             [
+                                                                                 {
+                                                                                     "node":  "LLM 4 - Compliance Analysis",
+                                                                                     "type":  "main",
+                                                                                     "index":  0
+                                                                                 }
+                                                                             ],
+                                                                             [
+                                                                                 {
+                                                                                     "node":  "Fallback Response - No Product Evidence",
+                                                                                     "type":  "main",
+                                                                                     "index":  0
+                                                                                 }
+                                                                             ]
+                                                                         ]
+                                                            },
+                        "LLM 4 - Compliance Analysis":  {
+                                                            "main":  [
+                                                                         {
+                                                                             "node":  "LLM 5 - Product Ranking",
+                                                                             "type":  "main",
+                                                                             "index":  0
+                                                                         }
+                                                                     ]
+                                                        },
+                        "LLM 5 - Product Ranking":  {
+                                                        "main":  [
+                                                                     {
+                                                                         "node":  "LLM 6 - Final Report",
+                                                                         "type":  "main",
+                                                                         "index":  0
+                                                                     }
                                                                  ]
                                                     },
                         "LLM 6 - Final Report":  {
                                                      "main":  [
-                                                                  [
-                                                                      {
-                                                                          "node":  "Respond to Webhook",
-                                                                          "type":  "main",
-                                                                          "index":  0
-                                                                      }
-                                                                  ]
+                                                                  {
+                                                                      "node":  "Respond to Webhook",
+                                                                      "type":  "main",
+                                                                      "index":  0
+                                                                  }
                                                               ]
                                                  }
                     },
-    "pinData":  {
-
-                },
     "settings":  {
                      "executionOrder":  "v1"
                  },
     "staticData":  null,
+    "pinData":  {
+
+                },
     "tags":  [
 
              ],
     "triggerCount":  0,
-    "updatedAt":  "2026-06-01T00:00:00.000Z",
-    "versionId":  "product-standard-compliance-agent-v1",
-    "id":  "productStandardComplianceAgent001",
-    "active":  false
+    "updatedAt":  "2026-06-03T00:00:00.000Z",
+    "versionId":  "portfolio-evidence-model-v2"
 }

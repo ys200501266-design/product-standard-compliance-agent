@@ -1,125 +1,126 @@
-# n8n 工作流设计说明
+# Workflow Design：n8n 交付说明
 
-## 总览
+## 1. 工作流目标
 
-工作流路径：`n8n/product_standard_compliance_workflow.json`
+将用户的商品选购需求自动转化为标准检索、商品证据判断和结构化推荐报告。工作流强调证据链、风险提示和可解释排序。
 
-设计思路：接收用户需求后，先识别品类，再搜索标准，再搜索商品，最后基于公开证据进行合规分析和推荐排序。
+## 2. 节点总览
 
-## 节点 1：Webhook
+| 序号 | 节点名称 | 节点类型 | 作用 |
+|---:|---|---|---|
+| 1 | Webhook | Webhook | 接收用户输入 |
+| 2 | Input Validation | Code | 标准化输入并检查必填字段 |
+| 3 | IF - Missing product_name | IF | 判断是否缺少产品名称 |
+| 4 | Error Response - Missing product_name | Respond to Webhook | 返回输入错误 |
+| 5 | LLM 1 - Product Category Identification | HTTP Request | 识别品类和标准检索关键词 |
+| 6 | Search 1 - Standard Search | HTTP Request | 检索标准、认证和监管信息 |
+| 7 | IF - Standard Search Empty | IF | 判断标准搜索是否为空 |
+| 8 | Fallback Response - No Standard Results | Respond to Webhook | 标准线索不足时返回兜底报告 |
+| 9 | LLM 2 - Standard Extraction | HTTP Request | 整理标准信息 |
+| 10 | LLM 3 - Product Search Strategy | HTTP Request | 生成商品搜索策略 |
+| 11 | Search 2 - Product Search | HTTP Request | 检索商品和证据页面 |
+| 12 | IF - Product Search Empty | IF | 判断商品证据搜索是否为空 |
+| 13 | Fallback Response - No Product Evidence | Respond to Webhook | 商品证据不足时返回兜底报告 |
+| 14 | LLM 4 - Compliance Analysis | HTTP Request | 分析商品证据等级 |
+| 15 | LLM 5 - Product Ranking | HTTP Request | 评分排序 |
+| 16 | LLM 6 - Final Report | HTTP Request | 生成最终报告 |
+| 17 | Respond to Webhook | Respond to Webhook | 返回 Markdown 报告 |
 
-- 类型：Webhook
-- 作用：接收用户输入。
-- 输入：`product_name`、`use_case`、`budget`、`region`、`extra_requirements`
-- 输出：原始用户需求 JSON。
-- 连接：输出给 LLM 1。
+## 3. 节点输入输出
 
-## 节点 2：LLM 1 - Product Category Identification
+| 节点 | 输入 | 输出 |
+|---|---|---|
+| Webhook | HTTP POST JSON | 用户需求 |
+| Input Validation | Webhook body | 标准化字段、`is_missing_product_name` |
+| LLM 1 | 标准化用户需求 | 品类、风险、检索关键词 |
+| Search 1 | 标准检索关键词 | 标准搜索结果 |
+| LLM 2 | 品类信息、标准搜索结果 | 标准清单、证据等级 |
+| LLM 3 | 用户需求、标准清单 | 商品搜索 query |
+| Search 2 | 商品搜索 query | 商品搜索结果 |
+| LLM 4 | 标准清单、商品搜索结果 | 商品证据分析 |
+| LLM 5 | 商品证据分析 | 推荐排序和评分 |
+| LLM 6 | 标准清单、排序结果 | Markdown 报告 |
 
-- 类型：HTTP Request
-- 作用：调用 OpenAI API，识别产品品类并生成标准检索关键词。
-- 输入：Webhook JSON。
-- 输出：品类、子品类、风险等级、标准检索关键词、商品检索关键词。
-- 连接：输出给 Search 1。
+## 4. 连接关系
 
-## 节点 3：Search 1 - Standard Search
+主流程为：
 
-- 类型：HTTP Request
-- 作用：调用搜索 API 检索标准和认证信息。
-- 输入：LLM 1 生成的标准关键词。
-- 输出：搜索结果列表。
-- 连接：输出给 LLM 2。
-- 推荐 API：SerpAPI、Tavily、Bing Search API、Firecrawl。
+`Webhook -> Input Validation -> IF -> LLM 1 -> Search 1 -> IF -> LLM 2 -> LLM 3 -> Search 2 -> IF -> LLM 4 -> LLM 5 -> LLM 6 -> Respond`
 
-## 节点 4：LLM 2 - Standard Extraction
+异常流程：
 
-- 类型：HTTP Request
-- 作用：从搜索结果提取标准编号、名称、类型、适用范围、关键要求和来源链接。
-- 输入：产品品类信息和标准搜索结果。
-- 输出：结构化标准清单。
-- 连接：输出给 LLM 3。
-
-## 节点 5：LLM 3 - Product Search Strategy
-
-- 类型：HTTP Request
-- 作用：基于用户需求和标准清单生成商品搜索关键词组合。
-- 输入：用户需求、品类判断、标准清单。
-- 输出：商品搜索 query。
-- 连接：输出给 Search 2。
-
-## 节点 6：Search 2 - Product Search
-
-- 类型：HTTP Request
-- 作用：搜索商品、品牌官网、电商详情页、检测报告和认证信息。
-- 输入：LLM 3 生成的搜索 query。
-- 输出：商品搜索结果。
-- 连接：输出给 LLM 4。
-
-## 节点 7：LLM 4 - Compliance Analysis
-
-- 类型：HTTP Request
-- 作用：分析候选商品是否公开标注标准或认证信息。
-- 输入：用户需求、标准清单、商品搜索结果。
-- 输出：商品合规证据分析。
-- 连接：输出给 LLM 5。
-
-## 节点 8：LLM 5 - Product Ranking
-
-- 类型：HTTP Request
-- 作用：根据评分规则排序推荐商品。
-- 输入：商品合规分析。
-- 输出：排序结果、分数、推荐理由和风险说明。
-- 连接：输出给 LLM 6。
-
-## 节点 9：LLM 6 - Final Report
-
-- 类型：HTTP Request
-- 作用：生成最终 Markdown 报告。
-- 输入：标准整理和推荐排序结果。
-- 输出：Markdown 报告。
-- 连接：输出给 Respond to Webhook。
-
-## 节点 10：Respond to Webhook
-
-- 类型：Respond to Webhook
-- 作用：把 Markdown 报告返回给用户。
-- 输入：LLM 6 输出。
-- 输出：HTTP Response。
-
-## 需要配置的 API
-
-| API | 用途 |
+| 异常 | 连接 |
 |---|---|
-| OPENAI_API_KEY | 调用 LLM 节点 |
-| SERPAPI_API_KEY | 调用搜索节点 |
+| 缺少 `product_name` | `IF - Missing product_name -> Error Response` |
+| 标准搜索无结果 | `IF - Standard Search Empty -> Fallback Response - No Standard Results` |
+| 商品搜索无结果 | `IF - Product Search Empty -> Fallback Response - No Product Evidence` |
 
-如果不使用 SerpAPI，可以把搜索节点替换为 Tavily、Bing Search API 或 Firecrawl。只要输出包含标题、摘要和链接即可。
+## 5. 搜索 API 配置方式
 
-## 没有搜索 API 时如何测试
+默认示例使用 SerpAPI：
 
-可以临时把 Search 1 和 Search 2 替换为 Set 节点，手动放入模拟搜索结果。示例字段：
+| 参数 | 示例 |
+|---|---|
+| URL | `https://serpapi.com/search.json` |
+| engine | `bing` |
+| api_key | `{{$env.SERPAPI_API_KEY}}` |
+| q | 来自上游 LLM 输出 |
 
-```json
-{
-  "organic_results": [
-    {
-      "title": "示例标准页面标题",
-      "link": "https://example.com/standard",
-      "snippet": "此处为模拟标准摘要。"
-    }
-  ]
-}
+也可以替换为 Tavily、Bing Search API 或 Firecrawl。只要返回结果包含标题、摘要和链接即可。
+
+## 6. OpenAI API 配置方式
+
+LLM 节点使用 HTTP Request 调用：
+
+| 参数 | 值 |
+|---|---|
+| Method | POST |
+| URL | `https://api.openai.com/v1/chat/completions` |
+| Authorization | `Bearer {{$env.OPENAI_API_KEY}}` |
+| Content-Type | `application/json` |
+
+## 7. Mock Demo 模式
+
+如果没有搜索 API，可以临时把 Search 节点替换为 Set 节点，并使用：
+
+[examples/mock_search_results.json](examples/mock_search_results.json)
+
+Mock 数据只用于演示结构，不能作为真实推荐依据。
+
+## 8. Webhook 测试方法
+
+```bash
+curl -X POST "http://localhost:5678/webhook/product-compliance-recommend" \
+  -H "Content-Type: application/json" \
+  -d @n8n/test_payload.json
 ```
 
-注意：模拟数据只用于演示流程，不能作为真实合规结论。
+## 9. 常见错误
 
-## 使用 Postman 测试 Webhook
+| 错误 | 可能原因 | 处理方式 |
+|---|---|---|
+| Webhook 无响应 | workflow 未激活或 URL 用错 | 检查 test/production webhook URL |
+| OpenAI 节点失败 | API Key 缺失或额度不足 | 检查环境变量和账户额度 |
+| 搜索节点为空 | 搜索 API 未配置或 query 过窄 | 使用 Mock 数据或更换搜索关键词 |
+| JSON 解析失败 | LLM 未按 JSON 输出 | 检查 Prompt 和 response_format |
+| 导入失败 | n8n 版本差异 | 参考 import_guide 手动调整节点 |
 
-1. 在 n8n 中点击 `Execute workflow`。
-2. 复制 Webhook Test URL。
-3. Postman 选择 POST。
-4. Body 选择 raw JSON。
-5. 粘贴 `n8n/test_payload.json` 内容。
-6. 点击 Send。
-7. 查看返回的 Markdown 报告。
+## 10. 调试方法
 
+1. 先只执行 Webhook 和 Input Validation。
+2. 检查 LLM 1 是否输出标准关键词。
+3. 单独运行 Search 1 看是否有结果。
+4. 如果搜索为空，使用 Mock 数据验证后续流程。
+5. 检查每个 LLM 节点是否输出约定字段。
+6. 最终报告必须包含证据等级和不确定性。
+
+## 11. 导入 n8n 后需要手动检查的地方
+
+| 检查项 | 说明 |
+|---|---|
+| API Key | 确认 OpenAI 和搜索 API 可用 |
+| Search 节点 | 根据实际搜索服务调整 URL 和参数 |
+| Webhook URL | 测试模式和生产模式 URL 不同 |
+| IF 条件 | 不同 n8n 版本条件编辑器展示可能不同 |
+| Mock 模式 | 如果没有搜索 API，临时使用 Set 节点 |
+| 节点名称 | 保持名称一致，方便表达式引用 |

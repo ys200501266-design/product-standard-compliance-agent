@@ -1,8 +1,8 @@
 .env
+.env.local
 node_modules/
 .DS_Store
 *.log
 credentials.json
 secrets.json
 .n8n/
-.env.local

@@ -1,0 +1,48 @@
+{
+  "note": "mock data，仅用于演示工作流结构。真实运行时应由搜索 API 返回真实来源。",
+  "mock_standard_results": [
+    {
+      "title": "Mock 标准线索：食品接触用金属材料及制品",
+      "link": "https://example.com/mock-standard-food-contact-metal",
+      "snippet": "mock data：示例标准线索，用于展示标准搜索结果结构，不代表真实标准检索结果。",
+      "evidence_level": "A",
+      "mock": true
+    },
+    {
+      "title": "Mock 标准线索：不锈钢真空杯相关要求",
+      "link": "https://example.com/mock-standard-thermos",
+      "snippet": "mock data：示例标准线索，用于展示保温杯类产品可能关注的质量和安全要求。",
+      "evidence_level": "A",
+      "mock": true
+    }
+  ],
+  "mock_product_results": [
+    {
+      "title": "DemoKids Thermos A 商品详情页",
+      "brand": "DemoKids",
+      "price": "89",
+      "link": "https://example.com/demokids-thermos-a",
+      "snippet": "mock data：虚构商品 A，页面示例展示执行标准字段和材质说明。",
+      "evidence_level": "B",
+      "mock": true
+    },
+    {
+      "title": "DemoKids Thermos B 商品详情页",
+      "brand": "DemoKids",
+      "price": "99",
+      "link": "https://example.com/demokids-thermos-b",
+      "snippet": "mock data：虚构商品 B，页面只有部分材质说明，缺少完整检测报告。",
+      "evidence_level": "C",
+      "mock": true
+    },
+    {
+      "title": "DemoKids Thermos C 第三方测评页",
+      "brand": "DemoKids",
+      "price": "79",
+      "link": "https://example.com/demokids-thermos-c",
+      "snippet": "mock data：虚构商品 C，信息来自第三方页面，不能作为强推荐证据。",
+      "evidence_level": "D",
+      "mock": true
+    }
+  ]
+}
