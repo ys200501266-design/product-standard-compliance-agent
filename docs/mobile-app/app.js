@@ -270,6 +270,16 @@ function inlineMarkdown(value) {
     .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
 }
 
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./service-worker.js").catch(() => {
+      // The app should still work normally if a browser blocks service workers.
+    });
+  });
+}
+
 function escapeHtml(value) {
   return String(value)
     .replace(/&/g, "&amp;")
@@ -280,3 +290,4 @@ function escapeHtml(value) {
 }
 
 init();
+registerServiceWorker();
